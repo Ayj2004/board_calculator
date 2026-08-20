@@ -78,7 +78,7 @@ DEFAULT_FLOOR_PRICE = {
     },
     "self_tapping_screw": {
         "unit_price_eur": 0.02,   # 自攻丝单价
-        "count_per_sqm": 6,       # 每平米数量
+        "count_per_sqm": 21,       # 每平米数量
         "spec": "无",
         "unit": "个",
     },

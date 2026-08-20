@@ -5,8 +5,10 @@
 所有计算结果以欧元为基准币种，再根据用户选择的币种换算显示。
 """
 
+
 import math
 from typing import Dict, List, Tuple
+
 
 
 # ============================================================
@@ -36,9 +38,11 @@ def convert_currency(amount_eur: float, target_currency: str,
     return amount_eur
 
 
+
 def currency_symbol(currency: str) -> str:
     """返回币种符号"""
     return {"EUR": "€", "USD": "$", "CNY": "¥"}.get(currency, "")
+
 
 
 # ============================================================
@@ -78,11 +82,13 @@ def calc_wall_panel_unit_prices(
     # 美元单支价格 = 人民币单支价 / CNY/USD
     price_usd_per_piece = price_cny_per_piece / cny_to_usd
 
+
     return {
         "cny": price_cny_per_piece,
         "eur": price_eur_per_piece,
         "usd": price_usd_per_piece,
     }
+
 
 
 def calc_wall_panel_by_area(
@@ -116,8 +122,11 @@ def calc_wall_panel_by_area(
     )
     # 所需数量 = 面积 / (单支米数 × 板宽)
     pieces_needed = area_sqm / (length_per_piece * panel_width_m)
-    # 总价（欧元基准）= 数量 × 欧元单支价
+    # 各币种总价
+    total_cny = pieces_needed * unit_prices["cny"]
     total_eur = pieces_needed * unit_prices["eur"]
+    total_usd = pieces_needed * unit_prices["usd"]
+
 
     return {
         "method": "按面积",
@@ -127,8 +136,11 @@ def calc_wall_panel_by_area(
         "unit_price_cny": unit_prices["cny"],
         "unit_price_eur": unit_prices["eur"],
         "unit_price_usd": unit_prices["usd"],
+        "total_cny": total_cny,
         "total_eur": total_eur,
+        "total_usd": total_usd,
     }
+
 
 
 def calc_wall_panel_by_length(
@@ -161,8 +173,11 @@ def calc_wall_panel_by_length(
     )
     # 所需数量 = 长度 / 板宽 + 5（余量）
     pieces_needed = length_m / panel_width_m + extra_pieces
-    # 总价 = 欧元单支价 × 数量
-    total_eur = unit_prices["eur"] * pieces_needed
+    # 各币种总价
+    total_cny = pieces_needed * unit_prices["cny"]
+    total_eur = pieces_needed * unit_prices["eur"]
+    total_usd = pieces_needed * unit_prices["usd"]
+
 
     return {
         "method": "按长度",
@@ -172,8 +187,11 @@ def calc_wall_panel_by_length(
         "unit_price_cny": unit_prices["cny"],
         "unit_price_eur": unit_prices["eur"],
         "unit_price_usd": unit_prices["usd"],
+        "total_cny": total_cny,
         "total_eur": total_eur,
+        "total_usd": total_usd,
     }
+
 
 
 # ============================================================
@@ -215,9 +233,10 @@ def calc_fence(
     # 所需立柱数 = 长度/1.8 + 1
     post_count = fence_length_m / section_len + 1
 
-    # 构建各项明细
+    # 构建各项明细 —— 给6个重量配件增加key字段
     items = [
         {
+            "key": "post",   # ✅新增
             "name": "立柱",
             "quantity": post_count,
             "unit": "根",
@@ -236,30 +255,35 @@ def calc_fence(
             "unit_price_eur": fence_config["fence_board_11"]["unit_price_eur"],
         },
         {
+            "key": "side_strip", # ✅新增
             "name": "侧条",
             "quantity": post_count,
             "unit": "根",
             "unit_price_eur": fence_config["side_strip"]["unit_price_eur"],
         },
         {
+            "key": "groove_strip", # ✅新增
             "name": "凹条",
             "quantity": post_count,
             "unit": "根",
             "unit_price_eur": fence_config["groove_strip"]["unit_price_eur"],
         },
         {
+            "key": "tongue_strip", # ✅新增
             "name": "凸条",
             "quantity": post_count,
             "unit": "根",
             "unit_price_eur": fence_config["tongue_strip"]["unit_price_eur"],
         },
         {
+            "key": "post_base", # ✅新增
             "name": "柱座",
             "quantity": post_count,
             "unit": "个",
             "unit_price_eur": fence_config["post_base"]["unit_price_eur"],
         },
         {
+            "key": "post_cap", # ✅新增
             "name": "柱帽",
             "quantity": post_count,
             "unit": "个",
@@ -305,7 +329,7 @@ def calc_floor(
         B25 龙骨 = B23*3；总价 = B25/2.9 × 1.8
         B26 美固钉 = B23*6；总价 = 0.05 × 数量
         B27 卡扣 = B23*21；总价 = 0.05 × 数量
-        B28 自攻丝 = B23*6；总价 = 0.02 × 数量
+        B28 自攻丝 = B23*21；总价 = 0.02 × 数量
         B29 起始扣 = SQRT(B23)/0.5*2；总价 = 0.05 × 数量
         B30 封边 = SQRT(B23)/2.9*2；总价 = 2.6 × 数量
 
@@ -415,6 +439,7 @@ def calc_accessory_weight(
     section_len = fence_config["section_length_m"]
     post_count = fence_length_m / section_len + 1  # 立柱数 = 侧条/凹条/凸条/柱座/柱帽数
 
+
     weight = (
         accessory_config["post_weight_per_piece"] * post_count
         + accessory_config["side_strip_weight"] * post_count
@@ -425,6 +450,7 @@ def calc_accessory_weight(
     )
     # CEILING(..., 1) 向上取整
     weight_ceil = math.ceil(weight)
+
 
     return {
         "fence_length": fence_length_m,

@@ -6,14 +6,19 @@ app_config改为key‑value行式存储，不再单条jsonb大字段
 改造：移除底部全局保存、移除全局恢复出厂；每个输入框行带✔保存、✖撤销、↺单字段重置
 按钮仅条件显示：修改后才显示✔✖；非默认值才显示↺重置
 修复：Streamlit int/float混合number_input报错；修复保存后错误取值逻辑
+修复：二代长城板表格与顶部metric价格不一致问题
 需求变更：
 1.包装计算移除配件重量模块；配件重量仅围栏板价格计算页面保留
 2.围栏板价格结果移除独立“所需立柱数”metric，仅保留表格
-3.UI展示价格统一1位小数；数量UI展示四舍五入，底层计算保留小数精度
+3.UI展示价格统一1位小数；数量UI展示四舍五入，底层计算保留完整小数精度
+业务规则更新：
+- 二代共挤四代长城板：人民币=(含税单价元/米 + cny_extra_per_meter)*单支米数；欧元=人民币/cny_to_eur + eur_extra_fee；美元=人民币/cny_to_usd
+- 围栏板、地板源配置仅存欧元单价，通过汇率动态换算CNY / USD
+- 全部三类板材支持自由切换 EUR / USD / CNY；底层价格不做round，仅UI格式化显示1位小数
 """
 
 import copy
-import json
+import math
 
 import streamlit as st
 import pandas as pd
@@ -154,7 +159,7 @@ def _deep_merge(base: dict, override: dict) -> dict:
 # min_value, step等数字输入参数
 # ------------------------------
 def editable_number_input(flat_key: str, db_value, default_value, label: str,
-                         min_value=None, max_value=None, step=0.01):
+                          min_value=None, max_value=None, step=0.01):
     edit_key = f"edit_tmp{flat_key}"
     changed_flag_key = f"is_changed{flat_key}"
     # 初始化临时编辑缓存
@@ -193,8 +198,8 @@ def editable_number_input(flat_key: str, db_value, default_value, label: str,
             step=step,
             key=f"num_{flat_key}",
             on_change=lambda: (
-                st.session_state.setitem(edit_key, st.session_state[f"num_{flat_key}"]),
-                st.session_state.setitem(changed_flag_key, True)
+                setattr(st.session_state, edit_key, st.session_state[f"num_{flat_key}"]),
+                setattr(st.session_state, changed_flag_key, True)
             )
         )
 
@@ -235,6 +240,7 @@ def editable_number_input(flat_key: str, db_value, default_value, label: str,
                                 st.session_state[edit_key] = default_value
                                 st.session_state[changed_flag_key] = False
                                 st.rerun()
+    # 不返回局部config，外部统一读取 st.session_state["config"]
     return st.session_state["config"]
 
 
@@ -300,7 +306,7 @@ def page_price_calc(config: dict):
                     eur_extra_fee=wp_cfg["eur_extra_fee"],
                     cny_extra_per_meter=wp_cfg["cny_extra_per_meter"],
                 )
-                _display_wall_panel_result(result, currency, cny_to_eur, cny_to_usd, sym)
+                _display_wall_panel_result(result, currency, sym)
 
         else:
             col1, col2 = st.columns(2)
@@ -328,21 +334,21 @@ def page_price_calc(config: dict):
                     cny_extra_per_meter=wp_cfg["cny_extra_per_meter"],
                     extra_pieces=wp_cfg["length_calc_extra_pieces"],
                 )
-                _display_wall_panel_result(result, currency, cny_to_eur, cny_to_usd, sym)
+                _display_wall_panel_result(result, currency, sym)
 
     elif panel_type == "围栏板":
-        st.info("💡 围栏板所有单价均为带利润价格；非常规尺寸价格另算。")
+        st.info("💡 围栏板原始配置存储欧元价格；可切换显示CNY / USD；非常规尺寸价格另算。")
         fence_length = st.number_input(
             "围栏长度（米）", min_value=0.0, value=10.0, step=1.0, key="fence_length"
         )
 
         if st.button("计算", type="primary", key="fence_calc"):
             result = calc_fence(fence_length, config["fence_price"], cny_to_eur, cny_to_usd)
-            _display_fence_result(result, currency, cny_to_eur, cny_to_usd, sym)
+            _display_fence_result(result, currency, cny_to_eur, cny_to_usd, sym, config)
             st.session_state["last_fence_length"] = fence_length
 
     elif panel_type == "地板":
-        st.info("💡 地板均为带利润价格；龙骨和封边为标准2.9米尺寸，定制价格另算。")
+        st.info("💡 地板原始配置存储欧元价格；可切换显示CNY / USD；龙骨和封边为标准2.9米尺寸，定制价格另算。")
         floor_area = st.number_input(
             "地板面积（平方米）", min_value=0.0, value=10.0, step=1.0, key="floor_area"
         )
@@ -352,56 +358,110 @@ def page_price_calc(config: dict):
             _display_floor_result(result, currency, cny_to_eur, cny_to_usd, sym)
 
 
-def _display_wall_panel_result(result: dict, currency: str, cny_to_eur: float,
-                              cny_to_usd: float, sym: str):
+def _display_wall_panel_result(result: dict, currency: str, sym: str):
+    """
+    二代长城板渲染：直接读取result内部已经算好的各币种价格，不再二次汇率转换
+    修复：顶部metric和表格价格不一致
+    """
     st.subheader("📊 计算结果")
     col1, col2, col3 = st.columns(3)
-    col1.metric("人民币单支价", f"¥ {result['unit_price_cny']:.1f}")
-    col2.metric("欧元单支价", f"€ {result['unit_price_eur']:.1f}")
-    col3.metric("美元单支价", f"$ {result['unit_price_usd']:.1f}")
+    col1.metric("人民币单支价", f"¥ {result['unit_price_cny']:.2f}")
+    col2.metric("欧元单支价", f"€ {result['unit_price_eur']:.2f}")
+    col3.metric("美元单支价", f"$ {result['unit_price_usd']:.2f}")
 
-    unit_price_target = convert_currency(result["unit_price_eur"], currency, cny_to_eur, cny_to_usd)
-    total_target = convert_currency(result["total_eur"], currency, cny_to_eur, cny_to_usd)
+
+    # 直接取已经计算完成的对应币种，禁止二次convert_currency
+    if currency == "CNY":
+        unit_price_target = result["unit_price_cny"]
+        total_target = result["total_cny"]
+    elif currency == "EUR":
+        unit_price_target = result["unit_price_eur"]
+        total_target = result["total_eur"]
+    else: # USD
+        unit_price_target = result["unit_price_usd"]
+        total_target = result["total_usd"]
+
 
     input_val = (f"{result['input_area']} m²" if "input_area" in result
                  else f"{result['input_length']} m")
+
 
     df = pd.DataFrame([{
         "计算方式": result["method"],
         "输入值": input_val,
         "单支米数": f"{result['length_per_piece']} m",
         "所需数量（支）": f"{round(result['pieces_needed'])}",
-        f"单支价（{sym}）": f"{unit_price_target:.1f}",
-        f"总价（{sym}）": f"{total_target:.1f}",
+        f"单支价（{sym}）": f"{unit_price_target:.2f}",
+        f"总价（{sym}）": f"{total_target:.2f}",
     }])
     st.dataframe(df, use_container_width=True, hide_index=True)
-    st.caption("📌 UI展示数量做四舍五入取整；价格保留1位小数，内部计算使用原始高精度数值，与Excel逻辑一致。")
+    st.caption("📌 UI展示数量四舍五入；单价、总价均保留2位小数，底层计算保留完整高精度，与Excel逻辑一致。")
+
 
 
 def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
-                         cny_to_usd: float, sym: str):
+                          cny_to_usd: float, sym: str, config: dict):
     st.subheader("📊 计算结果")
     rows = []
+    # 用于统计配件重量：保存原始未四舍五入的计算数量
+    qty_map = {}
+    # 需要统计重量的key白名单，不在名单的配件不存入qty_map
+    weight_key_list = {"post", "side_strip", "groove_strip", "tongue_strip", "post_base", "post_cap"}
+
     for item in result["items"]:
         unit_price = convert_currency(item["unit_price_eur"], currency, cny_to_eur, cny_to_usd)
         total = convert_currency(item["total_eur"], currency, cny_to_eur, cny_to_usd)
+        
+        raw_qty = item["quantity"]     # ✅底层原始浮点数，重量计算用
+        disp_qty = round(raw_qty)      # ✅仅前端表格展示
+        
+        # 安全取key，只有key存在并且在重量白名单才存入qty_map
+        item_key = item.get("key")
+        if item_key is not None and item_key in weight_key_list:
+            qty_map[item_key] = raw_qty
+        
         rows.append({
             "项目": item["name"],
-            "数量": f"{round(item['quantity'])}",
+            "数量": f"{disp_qty}",
             "单位": item["unit"],
-            f"单价（{sym}）": f"{unit_price:.1f}",
-            f"总价（{sym}）": f"{total:.1f}",
+            f"单价（{sym}）": f"{unit_price:.2f}",
+            f"总价（{sym}）": f"{total:.2f}",
         })
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-    total_target = convert_currency(result["total_eur"], currency, cny_to_eur, cny_to_usd)
-    st.subheader(f"💰 总价：{sym} {total_target:.1f}")
-    st.caption("📌 UI展示数量做四舍五入取整；价格保留1位小数，内部计算使用原始高精度数值。")
 
+    total_target = convert_currency(result["total_eur"], currency, cny_to_eur, cny_to_usd)
+    st.subheader(f"💰 总价：{sym} {total_target:.2f}")
+
+
+    # ========== 围栏配件总重量，复刻Excel CEILING公式 ==========
+    aw = config["accessory_weight"]
+    q_post = qty_map.get("post", 0)
+    q_side_strip = qty_map.get("side_strip", 0)
+    q_groove_strip = qty_map.get("groove_strip", 0)
+    q_tongue_strip = qty_map.get("tongue_strip", 0)
+    q_post_base = qty_map.get("post_base", 0)
+    q_post_cap = qty_map.get("post_cap", 0)
+
+
+    weight_sum = (
+        aw["post_weight_per_piece"] * q_post
+        + aw["side_strip_weight"] * q_side_strip
+        + aw["groove_strip_weight"] * q_groove_strip
+        + aw["tongue_strip_weight"] * q_tongue_strip
+        + aw["post_base_weight"] * q_post_base
+        + aw["post_cap_weight"] * q_post_cap
+    )
+    # Excel CEILING(xxx,1) → math.ceil向上取整整数
+    acc_weight_kg = math.ceil(weight_sum)
+
+
+    st.metric(label="📦 围栏配件总重量", value=f"{acc_weight_kg} kg")
+    st.caption("📌 UI展示数量做四舍五入；重量计算使用底层原始浮点数量，复刻Excel CEILING向上取整逻辑。")
 
 def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
-                         cny_to_usd: float, sym: str):
+                          cny_to_usd: float, sym: str, config: dict):
     st.subheader("📊 计算结果")
 
     rows = []
@@ -417,15 +477,15 @@ def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
             "数量": qty_str,
             "规格": item["spec"],
             "单位": item["unit"],
-            f"单价（{sym}）": f"{unit_price:.1f}",
-            f"总价（{sym}）": f"{total:.1f}",
+            f"单价（{sym}）": f"{unit_price:.2f}",
+            f"总价（{sym}）": f"{total:.2f}",
         })
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
 
     total_target = convert_currency(result["total_eur"], currency, cny_to_eur, cny_to_usd)
-    st.subheader(f"💰 总价：{sym} {total_target:.1f}")
-    st.caption("📌 UI展示数量做四舍五入取整；价格保留1位小数，内部计算使用原始高精度数值。")
+    st.subheader(f"💰 总价：{sym} {total_target:.2f}")
+    st.caption("📌 UI展示数量四舍五入；单价、总价均保留2位小数，底层计算保留完整高精度。")
 
 
 # ============================================================
@@ -556,7 +616,7 @@ def page_settings(config: dict) -> dict:
                                       "按长度计算余量（支）", min_value=0, step=1)
 
     st.divider()
-    st.subheader("🚧 围栏板 —— 配件单价（欧元）")
+    st.subheader("🚧 围栏板 —— 配件单价（欧元）【源存储为欧元，前端自动换算CNY/USD】")
     fp = config["fence_price"]
     fp_def = DEFAULT_CONFIG["fence_price"]
     fence_items = [
@@ -592,7 +652,7 @@ def page_settings(config: dict) -> dict:
                                   "每根立柱膨胀丝数", min_value=1, step=1)
 
     st.divider()
-    st.subheader("🪵 地板 —— 配件单价（欧元）及参数")
+    st.subheader("🪵 地板 —— 配件单价（欧元）【源存储为欧元，前端自动换算CNY/USD】")
     flp = config["floor_price"]
     flp_def = DEFAULT_CONFIG["floor_price"]
     col_fl1, col_fl2, col_fl3 = st.columns(3)
@@ -665,7 +725,7 @@ def page_settings(config: dict) -> dict:
                                               "每托盘包装重（KG）", min_value=0, step=1)
             if tab_name == "围栏板":
                 config = editable_number_input(f"package.{pkg_type_map[tab_name]}.over_height_pieces",
-                                              pc.get("over_height_pieces",182), pc_def.get("over_height_pieces",182),
+                                              pc.get("over_height_pieces", 182), pc_def.get("over_height_pieces", 182),
                                               "180支以上高度计算用支数（Excel固定为182）", min_value=1, step=1)
 
     st.divider()
@@ -710,7 +770,7 @@ def main():
     config = st.session_state["config"]
 
     st.title("📐 WPC 板材计算器")
-    st.caption("二代共挤四代长城板 / 围栏板 / 地板 —— 价格 & 包装计算")
+    st.caption("二代共挤四代长城板 / 围栏板 / 地板 —— 价格 & 包装计算；支持 CNY / EUR / USD 币种切换")
 
     with st.sidebar:
         st.header("导航")
