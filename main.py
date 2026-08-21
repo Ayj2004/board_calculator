@@ -461,7 +461,7 @@ def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
     st.caption("📌 UI展示数量做四舍五入；重量计算使用底层原始浮点数量，复刻Excel CEILING向上取整逻辑。")
 
 def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
-                          cny_to_usd: float, sym: str, config: dict):
+                          cny_to_usd: float, sym: str):
     st.subheader("📊 计算结果")
 
     rows = []
