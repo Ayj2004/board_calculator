@@ -1,12 +1,14 @@
 # coding: utf-8 --
-""" WPC 板材计算器 —— Streamlit + Supabase版本 app_config改为key‑value行式存储，不再单条jsonb大字段
-版本：V2
+""" WPC 板材计算器 —— Streamlit + Supabase版本
+app_config改为key‑value行式存储，不再单条jsonb大字段
+版本：V2 + MOQ最小起订量适配
 """
 import copy
 import math
 import streamlit as st
 import pandas as pd
 from supabase import create_client, Client
+
 # 导入本地模块
 import sys
 sys.path.insert(0, sys.path[0])
@@ -21,8 +23,10 @@ from calculator.price_calc import (
     currency_symbol,
 )
 from calculator.package_calc import calc_package
+
 # ===================== Supabase 客户端初始化 =====================
 from postgrest.exceptions import APIError
+
 @st.cache_resource(show_spinner="连接Supabase...")
 def get_supabase_client() -> Client:
     """初始化supabase客户端，cache_resource只实例化一次"""
@@ -33,6 +37,8 @@ def get_supabase_client() -> Client:
     except KeyError:
         st.error("⚠️缺少Supabase Secrets：SUPABASE_URL / SUPABASE_ANON_KEY")
         return None
+
+
 def dict_to_kv_rows(d: dict, prefix: str = "") -> list[dict]:
     """
     嵌套字典转为扁平key‑value行
@@ -46,6 +52,8 @@ def dict_to_kv_rows(d: dict, prefix: str = "") -> list[dict]:
         else:
             rows.append({"key": full_key, "value": v})
     return rows
+
+
 def kv_rows_to_dict(rows: list[dict]) -> dict:
     """
     数据库扁平key‑value列表还原为嵌套字典
@@ -64,6 +72,8 @@ def kv_rows_to_dict(rows: list[dict]) -> dict:
         last = parts[-1]
         node[last] = val
     return root
+
+
 def _get_nested_value(d: dict, flat_key: str):
     """扁平key如 wall_panel_price.length_calc_extra_pieces 读取嵌套字典的值"""
     parts = flat_key.split(".")
@@ -71,6 +81,8 @@ def _get_nested_value(d: dict, flat_key: str):
     for p in parts:
         node = node[p]
     return node
+
+
 def load_config_supabase() -> dict:
     """从supabase加载配置；无数据返回DEFAULT_CONFIG，首次自动初始化全部行"""
     try:
@@ -91,6 +103,8 @@ def load_config_supabase() -> dict:
     except APIError as e:
         st.warning(f"⚠️ Supabase读取失败，使用本地出厂配置：{e}")
         return copy.deepcopy(DEFAULT_CONFIG)
+
+
 def save_config_supabase(cfg: dict):
     """【全量保存】把嵌套dict展开为全部kv行，批量upsert到app_config（用于初始化）"""
     supabase = get_supabase_client()
@@ -99,6 +113,8 @@ def save_config_supabase(cfg: dict):
     kv_list = dict_to_kv_rows(cfg)
     resp = supabase.table("app_config").upsert(kv_list).execute()
     return resp
+
+
 def save_single_kv(key_flat: str, value):
     """保存单个扁平key‑value到supabase"""
     supabase = get_supabase_client()
@@ -106,6 +122,8 @@ def save_single_kv(key_flat: str, value):
         return False
     supabase.table("app_config").upsert([{"key": key_flat, "value": value}]).execute()
     return True
+
+
 def _deep_merge(base: dict, override: dict) -> dict:
     """深度合并字典，override键覆盖base；base会被原地修改，请传入deepcopy副本"""
     for key, value in override.items():
@@ -114,18 +132,18 @@ def _deep_merge(base: dict, override: dict) -> dict:
         else:
             base[key] = value
     return base
-# ------------------------------
+
+
 # 封装：带行内按钮的数字输入组件
 # flat_key: "exchange_rate.cny_to_eur" 扁平key
 # db_value: 当前数据库真实值
 # default_value: DEFAULT_CONFIG出厂默认值
 # label: 输入框标签
 # min_value, step等数字输入参数
-# ------------------------------
 def editable_number_input(flat_key: str, db_value, default_value, label: str,
                           min_value=None, max_value=None, step=0.01):
-    edit_key = f"edit_tmp{flat_key}"
-    changed_flag_key = f"is_changed{flat_key}"
+    edit_key = f"edit_tmp_{flat_key}"
+    changed_flag_key = f"is_changed_{flat_key}"
     # 初始化临时编辑缓存
     if edit_key not in st.session_state:
         st.session_state[edit_key] = db_value
@@ -202,37 +220,36 @@ def editable_number_input(flat_key: str, db_value, default_value, label: str,
     # 不返回局部config，外部统一读取 st.session_state["config"]
     return st.session_state["config"]
 
-# ============================================================
+
 # 【新增】首页页面
-# ============================================================
 def page_home():
     st.header("📐 WPC 板材计算器")
     st.subheader("版本：V2")
     st.divider()
     st.markdown("### 📋 V2 本次更新内容")
     update_log = """
-   新增功能
-    - 增加首页。
-    - 二代共挤四代长城板按长度计算：可正常使用(其中长度为所覆盖的墙面长度，单支米数可以理解为单支可以覆盖墙面的高度)。
-    - 每个计算模块增加容错支数输入框，默认5；**仅主板材加容错，配件不加容错**
-    - 围栏板输出1.5米、1.8米两套围栏板单独分项总价
-"""
+新增功能
+ - 增加首页。
+ - 二代共挤四代长城板按长度计算：可正常使用(其中长度为所覆盖的墙面长度，单支米数可以理解为单支可以覆盖墙面的高度)。
+ - 每个计算模块增加容错支数输入框，默认5；仅主板材加容错，配件不加容错
+ - 围栏板输出1.5米、1.8米两套围栏板单独分项总价
+ - ✨新增最小起订MOQ校验：计算数量小于MOQ自动取最小起订量并弹窗提示
+    """
     st.markdown(update_log)
     st.divider()
     st.markdown("### 🧭 模块导航")
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.info("💰 **价格计算**\n\n二代长城板 / 围栏板 / 地板价格核算，支持EUR/USD/CNY切换，支持容错支数")
+        st.info("💰 价格计算\n\n二代长城板 / 围栏板 / 地板价格核算，支持EUR/USD/CNY切换，支持容错支数、MOQ最小起订")
     with col2:
-        st.info("📦 **包装计算**\n\n托盘、体积、重量核算，用于物流柜量测算")
+        st.info("📦 包装计算\n\n托盘、体积、重量核算，用于物流柜量测算")
     with col3:
-        st.info("⚙️ **设置**\n\n云端参数配置，单字段保存/撤销/重置，配置持久化Supabase")
+        st.info("⚙️ 设置\n\n云端参数配置，单字段保存/撤销/重置，配置持久化Supabase")
     st.divider()
     st.caption("💡 提示：请使用左侧侧边栏切换功能页面；配置自动保存在Supabase云端。")
 
-# ============================================================
+
 # 页面：价格计算
-# ============================================================
 def page_price_calc(config: dict):
     """价格计算页面"""
     st.header("💰 价格计算")
@@ -255,6 +272,7 @@ def page_price_calc(config: dict):
     )
     if panel_type == "二代共挤四代长城板":
         wp_cfg = config["wall_panel_price"]
+        moq_wall = wp_cfg["moq_pieces"]
         calc_method = st.selectbox(
             "计算方式",
             options=["按面积计算", "按长度计算"],
@@ -288,6 +306,11 @@ def page_price_calc(config: dict):
                 )
                 # 二代长城板主板叠加容错
                 result["pieces_needed"] += tolerance_pieces_wall
+                # ========= MOQ最小起订校验 =========
+                original_pieces = result["pieces_needed"]
+                if original_pieces < moq_wall:
+                    st.warning(f"⚠️计算得到需要 {original_pieces:.0f} 支，小于最小起订量{moq_wall}支，已自动使用MOQ最小起订量")
+                    result["pieces_needed"] = moq_wall
                 _display_wall_panel_result(result, currency, sym)
         else:
             col1, col2, col3 = st.columns(3)
@@ -318,9 +341,16 @@ def page_price_calc(config: dict):
                 )
                 # 叠加用户自定义容错支数
                 result["pieces_needed"] += tolerance_pieces_wall_len
+                # ========= MOQ最小起订校验 =========
+                original_pieces = result["pieces_needed"]
+                if original_pieces < moq_wall:
+                    st.warning(f"⚠️计算得到需要 {original_pieces:.0f} 支，小于最小起订量{moq_wall}支，已自动使用MOQ最小起订量")
+                    result["pieces_needed"] = moq_wall
                 _display_wall_panel_result(result, currency, sym)
     elif panel_type == "围栏板":
         st.info("💡 围栏板原始配置存储欧元价格；可切换显示CNY / USD；非常规尺寸价格另算。")
+        fp_cfg = config["fence_price"]
+        moq_fence = fp_cfg["moq_pieces"]
         col_f1, col_f2 = st.columns(2)
         with col_f1:
             fence_length = st.number_input(
@@ -334,7 +364,16 @@ def page_price_calc(config: dict):
             for it in result["items"]:
                 if it["name"] in ("1.5米高围栏板（9层）", "1.8米高围栏板（11层）"):
                     it["quantity"] += tolerance_pieces_fence
+
+            # ========= MOQ校验：仅2个围栏主板项目做最小起订量判断 =========
+            for it in result["items"]:
+                if it["name"] in ("1.5米高围栏板（9层）", "1.8米高围栏板（11层）"):
+                    ori_qty = it["quantity"]
+                    if ori_qty < moq_fence:
+                        st.warning(f"⚠️[{it['name']}] 计算数量 {ori_qty:.0f}，小于最小起订{moq_fence}，已自动使用MOQ")
+                        it["quantity"] = moq_fence
                     it["total_eur"] = it["quantity"] * it["unit_price_eur"]
+
             # 重新汇总总eur
             total_eur_new = 0.0
             for it in result["items"]:
@@ -344,6 +383,8 @@ def page_price_calc(config: dict):
             st.session_state["last_fence_length"] = fence_length
     elif panel_type == "地板":
         st.info("💡 地板原始配置存储欧元价格；可切换显示CNY / USD；龙骨和封边为标准2.9米尺寸，定制价格另算。")
+        fl_cfg = config["floor_price"]
+        moq_floor = fl_cfg["moq_pieces"]
         col_fl1, col_fl2 = st.columns(2)
         with col_fl1:
             floor_area = st.number_input(
@@ -357,6 +398,11 @@ def page_price_calc(config: dict):
             for it in result["items"]:
                 if it["name"] == "WPC地板":
                     it["quantity"] += tolerance_pieces_floor
+                    # ========= MOQ最小起订校验 =========
+                    ori_qty = it["quantity"]
+                    if ori_qty < moq_floor:
+                        st.warning(f"⚠️WPC地板计算得到 {ori_qty:.0f}支，小于最小起订{moq_floor}支，已自动使用MOQ最小起订量")
+                        it["quantity"] = moq_floor
                     it["total_eur"] = it["quantity"] * it["unit_price_eur"]
             # 重新汇总总eur
             total_eur_new = 0.0
@@ -364,6 +410,8 @@ def page_price_calc(config: dict):
                 total_eur_new += it["total_eur"]
             result["total_eur"] = total_eur_new
             _display_floor_result(result, currency, cny_to_eur, cny_to_usd, sym)
+
+
 def _display_wall_panel_result(result: dict, currency: str, sym: str):
     """
     二代长城板渲染：直接读取result内部已经算好的各币种价格，不再二次汇率转换
@@ -384,6 +432,7 @@ def _display_wall_panel_result(result: dict, currency: str, sym: str):
     else:  # USD
         unit_price_target = result["unit_price_usd"]
         total_target = result["pieces_needed"] * unit_price_target
+
     input_val = (f"{result['input_area']} m²" if "input_area" in result
                  else f"{result['input_length']} m")
     df = pd.DataFrame([{
@@ -396,6 +445,8 @@ def _display_wall_panel_result(result: dict, currency: str, sym: str):
     }])
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.caption("📌 UI展示数量四舍五入；单价、总价均保留2位小数，底层计算保留完整高精度，与Excel逻辑一致。")
+
+
 def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
                           cny_to_usd: float, sym: str, config: dict):
     st.subheader("📊 计算结果")
@@ -464,8 +515,10 @@ def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
     acc_weight_kg = math.ceil(weight_sum)
     st.metric(label="📦 围栏配件总重量", value=f"{acc_weight_kg} kg")
     st.caption("📌 UI展示数量做四舍五入；重量计算使用底层原始浮点数量，复刻Excel CEILING向上取整逻辑。")
+
+
 def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
-                          cny_to_usd: float, sym: str):
+                         cny_to_usd: float, sym: str):
     st.subheader("📊 计算结果")
     rows = []
     for item in result["items"]:
@@ -488,9 +541,9 @@ def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
     total_target = convert_currency(result["total_eur"], currency, cny_to_eur, cny_to_usd)
     st.subheader(f"💰 总价：{sym} {total_target:.2f}")
     st.caption("📌 UI展示数量四舍五入；单价、总价均保留2位小数，底层计算保留完整高精度。")
-# ============================================================
+
+
 # 页面：包装计算
-# ============================================================
 def page_package_calc(config: dict):
     st.header("📦 包装计算")
     panel_type = st.selectbox(
@@ -531,6 +584,8 @@ def page_package_calc(config: dict):
     if st.button("计算包装", type="primary", key="pkg_calc"):
         result = calc_package(pieces, length_per_piece, weight_per_meter, pkg_cfg)
         _display_package_result(result)
+
+
 def _display_package_result(result: dict):
     st.subheader("📊 计算结果")
     st.info(f"计算模式：{result['mode']}")
@@ -556,9 +611,9 @@ def _display_package_result(result: dict):
         "总重量（KG）": result["total_weight_kg"],
     }])
     st.dataframe(df, use_container_width=True, hide_index=True)
-# ============================================================
+
+
 # 页面：设置 —— 改造为行内✔✖↺单字段保存，移除底部全局保存/恢复出厂
-# ============================================================
 def page_settings(config: dict) -> dict:
     st.header("⚙️ 设置")
     st.info("💡 修改输入框后右侧出现 ✔保存 / ✖撤销；↺按钮仅在非出厂默认值时出现，点击直接重置并保存云端")
@@ -600,6 +655,9 @@ def page_settings(config: dict) -> dict:
                                       "人民币每米加价（元）", min_value=0.0, step=0.1)
         config = editable_number_input("wall_panel_price.length_calc_extra_pieces", wp["length_calc_extra_pieces"], wp_def["length_calc_extra_pieces"],
                                       "按长度计算余量（支）", min_value=0, step=1)
+        config = editable_number_input("wall_panel_price.moq_pieces", wp["moq_pieces"], wp_def["moq_pieces"],
+                                      "最小起订支数MOQ", min_value=1, step=1)
+
     st.divider()
     st.subheader("🚧 围栏板 —— 配件单价（欧元）【源存储为欧元，前端自动换算CNY/USD】")
     fp = config["fence_price"]
@@ -635,6 +693,9 @@ def page_settings(config: dict) -> dict:
                                       "每段板数(11片方案)", min_value=1, step=1)
     config = editable_number_input("fence_price.bolts_per_post", fp["bolts_per_post"], fp_def["bolts_per_post"],
                                    "每根立柱膨胀丝数", min_value=1, step=1)
+    config = editable_number_input("fence_price.moq_pieces", fp["moq_pieces"], fp_def["moq_pieces"],
+                                   "围栏主板最小起订MOQ", min_value=1, step=1)
+
     st.divider()
     st.subheader("🪵 地板 —— 配件单价（欧元）【源存储为欧元，前端自动换算CNY/USD】")
     flp = config["floor_price"]
@@ -667,6 +728,9 @@ def page_settings(config: dict) -> dict:
                                       "起始扣单价（€/个）", min_value=0.0, step=0.01)
         config = editable_number_input("floor_price.edge_band.unit_price_eur", flp["edge_band"]["unit_price_eur"], flp_def["edge_band"]["unit_price_eur"],
                                       "封边单价（€/支）", min_value=0.0, step=0.01)
+        config = editable_number_input("floor_price.moq_pieces", flp["moq_pieces"], flp_def["moq_pieces"],
+                                      "WPC地板最小起订MOQ", min_value=1, step=1)
+
     st.divider()
     st.subheader("📦 包装参数")
     pkg_tab1, pkg_tab2, pkg_tab3 = st.tabs(["长城板", "围栏板", "地板"])
@@ -731,9 +795,9 @@ def page_settings(config: dict) -> dict:
         config = editable_number_input("accessory_weight.post_cap_weight", aw["post_cap_weight"], aw_def["post_cap_weight"],
                                       "柱帽单重", min_value=0.0, step=0.01)
     return config
-# ============================================================
+
+
 # 主入口
-# ============================================================
 def main():
     st.set_page_config(
         page_title="WPC 板材计算器",
@@ -773,5 +837,7 @@ def main():
         page_package_calc(config)
     elif page == "设置":
         st.session_state["config"] = page_settings(config)
+
+
 if __name__ == "__main__":
     main()
