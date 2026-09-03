@@ -243,13 +243,13 @@ def calc_fence(
             "unit_price_eur": fence_config["post"]["unit_price_eur"],
         },
         {
-            "name": "围栏板(每段9片)",
+            "name": "1.5米高围栏板（9层）",
             "quantity": fence_length_m / section_len * boards_9,
             "unit": "片",
             "unit_price_eur": fence_config["fence_board_9"]["unit_price_eur"],
         },
         {
-            "name": "围栏板(每段11片)",
+            "name": "1.8米高围栏板（11层）",
             "quantity": fence_length_m / section_len * boards_11,
             "unit": "片",
             "unit_price_eur": fence_config["fence_board_11"]["unit_price_eur"],
