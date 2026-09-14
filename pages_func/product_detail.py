@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from database.crud import get_all_products, get_all_accessories
-
 # 字段中英文映射（和settings.py保持一致）
 PRODUCT_FIELD_CN = {
     "product_name": "产品名称",
@@ -26,8 +25,6 @@ ACC_FIELD_CN = {
     "spec": "规格",
     "remark": "备注"
 }
-
-
 def page_product_detail():
     st.title("📦产品详情查看")
     cat_sel = st.selectbox("选择产品大类", ["长城板", "围栏板", "地板", "围栏板配件", "地板配件"])
@@ -45,23 +42,24 @@ def page_product_detail():
     else:
         data = get_all_products(tbl_name)
         field_map = PRODUCT_FIELD_CN
-
     if not data:
         st.info("该分类暂无产品数据，请前往设置页添加")
         return
-
     name_list = [x["product_name"] for x in data]
     sel_name = st.selectbox("选择产品", name_list)
     rec = next(x for x in data if x["product_name"] == sel_name)
-
     st.subheader(f"{rec['product_name']}")
-    # ========== 图片放在最上方，固定宽度450像素，不会撑满浏览器 ==========
+    # ========== 修改图片排版：多图横向自动排列 + 点击预览 ==========
     img_urls = rec.get("image_urls", [])
     if isinstance(img_urls, list) and len(img_urls) > 0:
-        st.image(img_urls, width=450)
+        # 按3列布局图片
+        cols = st.columns(min(3, len(img_urls)))
+        for idx, img in enumerate(img_urls):
+            with cols[idx % 3]:
+                # 使用st.image自带点击放大预览功能
+                st.image(img, width="stretch")
     else:
         st.info("🖼️ 暂无产品图片")
-
     st.divider()
     st.subheader("📋产品基本参数")
     # 组装中文参数表格
@@ -77,13 +75,10 @@ def page_product_detail():
         else:
             show_val = str(raw_value)
         param_rows.append({"参数名称": cn_label, "参数值": show_val})
-
     df_param = pd.DataFrame(param_rows)
     st.dataframe(
         df_param,
         use_container_width=True,
         hide_index=True
     )
-
-
 page_product_detail()
