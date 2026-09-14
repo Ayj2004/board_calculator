@@ -214,7 +214,6 @@ def page_price_calc():
                     panel_width_m=wp_cfg["panel_width_m"],
                     eur_extra_fee=wp_cfg["eur_extra_fee"],
                     cny_extra_per_meter=wp_cfg["cny_extra_per_meter"],
-                    extra_pieces=wp_cfg["length_calc_extra_pieces"],
                 )
                 result["pieces_needed"] += tolerance_pieces_wall_len
                 original_pieces = result["pieces_needed"]

@@ -152,7 +152,6 @@ def calc_wall_panel_by_length(
     panel_width_m: float = 0.2,
     eur_extra_fee: float = 0.2,
     cny_extra_per_meter: float = 1.0,
-    extra_pieces: float = 5,
 ) -> Dict:
     """
     长城板 —— 按长度计算。
@@ -172,7 +171,7 @@ def calc_wall_panel_by_length(
         cny_to_eur, cny_to_usd, eur_extra_fee, cny_extra_per_meter
     )
     # 所需数量 = 长度 / 板宽 + 5（余量）
-    pieces_needed = length_m / panel_width_m + extra_pieces
+    pieces_needed = length_m / panel_width_m
     # 各币种总价
     total_cny = pieces_needed * unit_prices["cny"]
     total_eur = pieces_needed * unit_prices["eur"]
