@@ -8,7 +8,7 @@
 WALL_PANEL_PRODUCTS = [
     # 原有产品（兼容历史数据）
     {
-        "name": "二代共挤四代长城板",
+        "name": "二代共挤四孔长城板",
         "price_key": "wall_panel_price",
         "package_key": "wall_panel",
     },
@@ -56,7 +56,7 @@ DEFAULT_EXCHANGE_RATE = {
 # ============================================================
 # 二、墙板产品 —— 价格参数（已移除 length_calc_extra_pieces）
 # ============================================================
-# 原有产品：二代共挤四代长城板
+# 原有产品：二代共挤四孔长城板
 DEFAULT_WALL_PANEL_PRICE = {
     "price_per_meter_cny": 18.93,
     "default_length_per_piece": 2.9,
