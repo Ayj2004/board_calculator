@@ -8,7 +8,7 @@ def page_home():
     with col_top1:
         st.link_button("🚚 运费计算器", url="https://freightcalc-todufytkjq3zjv5c5tr2iz.streamlit.app/", use_container_width=True)
     with col_top2:
-        st.link_button("💻 下载桌面版", url="", use_container_width=True)
+        st.link_button("💻 下载桌面版", url="https://github.com/Ayj2004/board_calculator/releases/download/wpc-calculator-desktop/WPC_calculator.exe", use_container_width=True)
     st.divider()
     # ======================================
 
