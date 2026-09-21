@@ -3,7 +3,7 @@
 import pandas as pd
 import streamlit as st
 from calculator.package_calc import calc_package
-
+from config_default import WALL_PANEL_PRODUCTS
 
 def _display_package_result(result: dict):
     st.subheader("📊 计算结果")
@@ -31,48 +31,111 @@ def _display_package_result(result: dict):
     }])
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-
 def page_package_calc():
     config = st.session_state["config"]
     st.header("📦 包装计算")
+
+    wall_product_names = [p["name"] for p in WALL_PANEL_PRODUCTS]
     panel_type = st.selectbox(
         "选择板材类型",
-        options=["二代共挤四代长城板", "围栏板", "地板"],
+        options=wall_product_names + ["围栏板", "地板"],
         key="pkg_panel_type",
     )
-    type_key_map = {
-        "二代共挤四代长城板": "wall_panel",
-        "围栏板": "fence",
-        "地板": "floor",
-    }
-    pkg_cfg = config["package"][type_key_map[panel_type]]
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        pieces = st.number_input(
-            "数量（支）", min_value=1, value=100, step=1,
-            key=f"pkg_pieces_{panel_type}",
-        )
-    with col2:
-        length_per_piece = st.number_input(
-            "单支长度（米）",
-            min_value=0.1,
-            value=float(pkg_cfg["default_length_per_piece"]),
-            step=0.1,
-            key=f"pkg_length_{panel_type}",
-            help=f"该板材默认 {pkg_cfg['default_length_per_piece']} 米，可修改",
-        )
-    with col3:
-        weight_per_meter = st.number_input(
-            "米重（KG/米）",
-            min_value=0.01,
-            value=float(pkg_cfg["default_weight_per_meter"]),
-            step=0.01,
-            key=f"pkg_weight_{panel_type}",
-            help=f"该板材默认 {pkg_cfg['default_weight_per_meter']} KG/米，可修改",
-        )
-    if st.button("计算包装", type="primary", key="pkg_calc"):
-        result = calc_package(pieces, length_per_piece, weight_per_meter, pkg_cfg)
-        _display_package_result(result)
 
+    # ========== 墙板产品包装计算 ==========
+    if panel_type in wall_product_names:
+        product = next(p for p in WALL_PANEL_PRODUCTS if p["name"] == panel_type)
+        pkg_cfg = config["package"][product["package_key"]]
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            pieces = st.number_input(
+                "数量（支）", min_value=1, value=100, step=1,
+                key=f"pkg_pieces_{panel_type}",
+            )
+        with col2:
+            length_per_piece = st.number_input(
+                "单支长度（米）",
+                min_value=0.1,
+                value=float(pkg_cfg["default_length_per_piece"]),
+                step=0.1,
+                key=f"pkg_length_{panel_type}",
+                help=f"该板材默认 {pkg_cfg['default_length_per_piece']} 米，可修改",
+            )
+        with col3:
+            weight_per_meter = st.number_input(
+                "米重（KG/米）",
+                min_value=0.01,
+                value=float(pkg_cfg["default_weight_per_meter"]),
+                step=0.01,
+                key=f"pkg_weight_{panel_type}",
+                help=f"该板材默认 {pkg_cfg['default_weight_per_meter']} KG/米，可修改",
+            )
+
+        if st.button("计算包装", type="primary", key="pkg_calc"):
+            result = calc_package(pieces, length_per_piece, weight_per_meter, pkg_cfg)
+            _display_package_result(result)
+
+    # ========== 围栏板包装计算 ==========
+    elif panel_type == "围栏板":
+        pkg_cfg = config["package"]["fence"]
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            pieces = st.number_input(
+                "数量（支）", min_value=1, value=100, step=1,
+                key="pkg_pieces_fence",
+            )
+        with col2:
+            length_per_piece = st.number_input(
+                "单支长度（米）",
+                min_value=0.1,
+                value=float(pkg_cfg["default_length_per_piece"]),
+                step=0.1,
+                key="pkg_length_fence",
+                help=f"该板材默认 {pkg_cfg['default_length_per_piece']} 米，可修改",
+            )
+        with col3:
+            weight_per_meter = st.number_input(
+                "米重（KG/米）",
+                min_value=0.01,
+                value=float(pkg_cfg["default_weight_per_meter"]),
+                step=0.01,
+                key="pkg_weight_fence",
+                help=f"该板材默认 {pkg_cfg['default_weight_per_meter']} KG/米，可修改",
+            )
+        if st.button("计算包装", type="primary", key="pkg_calc_fence"):
+            result = calc_package(pieces, length_per_piece, weight_per_meter, pkg_cfg)
+            _display_package_result(result)
+
+    # ========== 地板包装计算 ==========
+    elif panel_type == "地板":
+        pkg_cfg = config["package"]["floor"]
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            pieces = st.number_input(
+                "数量（支）", min_value=1, value=100, step=1,
+                key="pkg_pieces_floor",
+            )
+        with col2:
+            length_per_piece = st.number_input(
+                "单支长度（米）",
+                min_value=0.1,
+                value=float(pkg_cfg["default_length_per_piece"]),
+                step=0.1,
+                key="pkg_length_floor",
+                help=f"该板材默认 {pkg_cfg['default_length_per_piece']} 米，可修改",
+            )
+        with col3:
+            weight_per_meter = st.number_input(
+                "米重（KG/米）",
+                min_value=0.01,
+                value=float(pkg_cfg["default_weight_per_meter"]),
+                step=0.01,
+                key="pkg_weight_floor",
+                help=f"该板材默认 {pkg_cfg['default_weight_per_meter']} KG/米，可修改",
+            )
+        if st.button("计算包装", type="primary", key="pkg_calc_floor"):
+            result = calc_package(pieces, length_per_piece, weight_per_meter, pkg_cfg)
+            _display_package_result(result)
 
 page_package_calc()

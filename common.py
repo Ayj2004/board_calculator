@@ -11,11 +11,12 @@ def get_supabase_client() -> Client:
     """初始化supabase客户端，cache_resource只实例化一次"""
     try:
         url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_ANON_KEY"]
+        key = st.secrets["SUPABASE_KEY"]
         return create_client(url, key)
     except KeyError:
-        st.error("⚠️缺少Supabase Secrets：SUPABASE_URL / SUPABASE_ANON_KEY")
+        st.error("⚠️缺少Supabase Secrets：SUPABASE_URL / SUPABASE_KEY")
         return None
+
 
 
 def dict_to_kv_rows(d: dict, prefix: str = "") -> list[dict]:

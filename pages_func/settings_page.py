@@ -2,13 +2,14 @@
 """设置页面"""
 import streamlit as st
 from common import editable_number_input
-from config_default import DEFAULT_CONFIG
-
+from config_default import DEFAULT_CONFIG, WALL_PANEL_PRODUCTS
 
 def page_settings():
     config = st.session_state["config"]
     st.header("⚙️ 设置")
     st.info("💡 修改输入框后右侧出现 ✔保存 / ✖撤销；↺按钮仅在非出厂默认值时出现，点击直接重置并保存云端")
+
+    # ========== 汇率设置 ==========
     st.subheader("💱 汇率设置")
     col_r1, col_r2 = st.columns(2)
     with col_r1:
@@ -27,29 +28,50 @@ def page_settings():
             label="人民币兑美元（CNY/USD）",
             min_value=0.01, step=0.01
         )
+
     st.divider()
-    st.subheader("🏗️ 二代共挤四代长城板 —— 价格参数")
-    wp = config["wall_panel_price"]
-    wp_def = DEFAULT_CONFIG["wall_panel_price"]
-    col_w1, col_w2, col_w3 = st.columns(3)
-    with col_w1:
-        config = editable_number_input("wall_panel_price.price_per_meter_cny", wp["price_per_meter_cny"], wp_def["price_per_meter_cny"],
-                                       "含税单价（元/米）", min_value=0.0, step=0.01)
-        config = editable_number_input("wall_panel_price.default_length_per_piece", wp["default_length_per_piece"], wp_def["default_length_per_piece"],
-                                       "默认单支米数", min_value=0.1, step=0.1)
-    with col_w2:
-        config = editable_number_input("wall_panel_price.panel_width_m", wp["panel_width_m"], wp_def["panel_width_m"],
-                                       "板材宽度（米）", min_value=0.01, step=0.01)
-        config = editable_number_input("wall_panel_price.eur_extra_fee", wp["eur_extra_fee"], wp_def["eur_extra_fee"],
-                                       "欧元额外加价（€/支）", min_value=0.0, step=0.01)
-    with col_w3:
-        config = editable_number_input("wall_panel_price.cny_extra_per_meter", wp["cny_extra_per_meter"], wp_def["cny_extra_per_meter"],
-                                       "人民币每米加价（元）", min_value=0.0, step=0.1)
-        config = editable_number_input("wall_panel_price.length_calc_extra_pieces", wp["length_calc_extra_pieces"], wp_def["length_calc_extra_pieces"],
-                                       "按长度计算余量（支）", min_value=0, step=1)
-        config = editable_number_input("wall_panel_price.moq_pieces", wp["moq_pieces"], wp_def["moq_pieces"],
-                                       "最小起订支数MOQ", min_value=1, step=1)
+
+    # ========== 墙板产品价格参数（动态遍历所有产品） ==========
+    st.subheader("🏗️ 墙板产品 —— 价格参数")
+    for idx, product in enumerate(WALL_PANEL_PRODUCTS):
+        prod_name = product["name"]
+        price_key = product["price_key"]
+        wp = config[price_key]
+        wp_def = DEFAULT_CONFIG[price_key]
+
+        with st.expander(f"📦 {prod_name}", expanded=(idx == 0)):
+            col_w1, col_w2, col_w3 = st.columns(3)
+            with col_w1:
+                config = editable_number_input(
+                    f"{price_key}.price_per_meter_cny", wp["price_per_meter_cny"], wp_def["price_per_meter_cny"],
+                    "含税单价（元/米）", min_value=0.0, step=0.01
+                )
+                config = editable_number_input(
+                    f"{price_key}.default_length_per_piece", wp["default_length_per_piece"], wp_def["default_length_per_piece"],
+                    "默认单支米数", min_value=0.1, step=0.1
+                )
+            with col_w2:
+                config = editable_number_input(
+                    f"{price_key}.panel_width_m", wp["panel_width_m"], wp_def["panel_width_m"],
+                    "板材宽度（米）", min_value=0.01, step=0.01
+                )
+                config = editable_number_input(
+                    f"{price_key}.eur_extra_fee", wp["eur_extra_fee"], wp_def["eur_extra_fee"],
+                    "欧元额外加价（€/支）", min_value=0.0, step=0.01
+                )
+            with col_w3:
+                config = editable_number_input(
+                    f"{price_key}.cny_extra_per_meter", wp["cny_extra_per_meter"], wp_def["cny_extra_per_meter"],
+                    "人民币每米加价（元）", min_value=0.0, step=0.1
+                )
+                config = editable_number_input(
+                    f"{price_key}.moq_pieces", wp["moq_pieces"], wp_def["moq_pieces"],
+                    "最小起订支数MOQ", min_value=1, step=1
+                )
+
     st.divider()
+
+    # ========== 围栏板设置 ==========
     st.subheader("🚧 围栏板 —— 配件单价（欧元）【源存储为欧元，前端自动换算CNY/USD】")
     fp = config["fence_price"]
     fp_def = DEFAULT_CONFIG["fence_price"]
@@ -86,7 +108,10 @@ def page_settings():
                                    "每根立柱膨胀丝数", min_value=1, step=1)
     config = editable_number_input("fence_price.moq_pieces", fp["moq_pieces"], fp_def["moq_pieces"],
                                    "围栏主板最小起订MOQ", min_value=1, step=1)
+
     st.divider()
+
+    # ========== 地板设置 ==========
     st.subheader("🪵 地板 —— 配件单价（欧元）【源存储为欧元，前端自动换算CNY/USD】")
     flp = config["floor_price"]
     flp_def = DEFAULT_CONFIG["floor_price"]
@@ -120,50 +145,136 @@ def page_settings():
                                        "封边单价（€/支）", min_value=0.0, step=0.01)
         config = editable_number_input("floor_price.moq_pieces", flp["moq_pieces"], flp_def["moq_pieces"],
                                        "WPC地板最小起订MOQ", min_value=1, step=1)
+
     st.divider()
+
+    # ========== 包装参数 ==========
     st.subheader("📦 包装参数")
-    pkg_tab1, pkg_tab2, pkg_tab3 = st.tabs(["长城板", "围栏板", "地板"])
-    pkg_type_map = {"长城板": "wall_panel", "围栏板": "fence", "地板": "floor"}
-    for tab_name, tab in zip(["长城板", "围栏板", "地板"], [pkg_tab1, pkg_tab2, pkg_tab3]):
-        with tab:
-            pc = config["package"][pkg_type_map[tab_name]]
-            pc_def = DEFAULT_CONFIG["package"][pkg_type_map[tab_name]]
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.default_length_per_piece",
-                                               pc["default_length_per_piece"], pc_def["default_length_per_piece"],
-                                               "默认单支长度（m）", min_value=0.1, step=0.1)
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.default_weight_per_meter",
-                                               pc["default_weight_per_meter"], pc_def["default_weight_per_meter"],
-                                               "默认米重（KG/m）", min_value=0.01, step=0.01)
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.width_m",
-                                               pc["width_m"], pc_def["width_m"],
-                                               "包装宽度（m）", min_value=0.01, step=0.01)
-            with c2:
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.length_extra_m",
-                                               pc["length_extra_m"], pc_def["length_extra_m"],
-                                               "长度余量（m）", min_value=0.0, step=0.01)
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.height_base_m",
-                                               pc["height_base_m"], pc_def["height_base_m"],
-                                               "高度基数（m）", min_value=0.0, step=0.01)
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.height_divisor",
-                                               pc["height_divisor"], pc_def["height_divisor"],
-                                               "高度除数", min_value=1, step=1)
-            with c3:
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.height_coeff",
-                                               pc["height_coeff"], pc_def["height_coeff"],
-                                               "高度系数", min_value=0.001, step=0.001)
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.pallet_capacity",
-                                               pc["pallet_capacity"], pc_def["pallet_capacity"],
-                                               "每托盘容量（支）", min_value=1, step=1)
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.packing_weight_kg",
-                                               pc["packing_weight_kg"], pc_def["packing_weight_kg"],
-                                               "每托盘包装重（KG）", min_value=0, step=1)
-            if tab_name == "围栏板":
-                config = editable_number_input(f"package.{pkg_type_map[tab_name]}.over_height_pieces",
-                                               pc.get("over_height_pieces", 182), pc_def.get("over_height_pieces", 182),
-                                               "180支以上高度计算用支数（Excel固定为182）", min_value=1, step=1)
+    pkg_tab1, pkg_tab2, pkg_tab3 = st.tabs(["墙板系列", "围栏板", "地板"])
+
+    # --- 墙板系列tab ---
+    with pkg_tab1:
+        selected_wall_name = st.selectbox(
+            "选择墙板产品",
+            options=[p["name"] for p in WALL_PANEL_PRODUCTS],
+            key="pkg_wall_product_select"
+        )
+        selected_product = next(p for p in WALL_PANEL_PRODUCTS if p["name"] == selected_wall_name)
+        pkg_key = selected_product["package_key"]
+        pc = config["package"][pkg_key]
+        pc_def = DEFAULT_CONFIG["package"][pkg_key]
+        flat_prefix = f"package.{pkg_key}"
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            config = editable_number_input(f"{flat_prefix}.default_length_per_piece",
+                                           pc["default_length_per_piece"], pc_def["default_length_per_piece"],
+                                           "默认单支长度（m）", min_value=0.1, step=0.1)
+            config = editable_number_input(f"{flat_prefix}.default_weight_per_meter",
+                                           pc["default_weight_per_meter"], pc_def["default_weight_per_meter"],
+                                           "默认米重（KG/m）", min_value=0.01, step=0.01)
+            config = editable_number_input(f"{flat_prefix}.width_m",
+                                           pc["width_m"], pc_def["width_m"],
+                                           "包装宽度（m）", min_value=0.01, step=0.01)
+        with c2:
+            config = editable_number_input(f"{flat_prefix}.length_extra_m",
+                                           pc["length_extra_m"], pc_def["length_extra_m"],
+                                           "长度余量（m）", min_value=0.0, step=0.01)
+            config = editable_number_input(f"{flat_prefix}.height_base_m",
+                                           pc["height_base_m"], pc_def["height_base_m"],
+                                           "高度基数（m）", min_value=0.0, step=0.01)
+            config = editable_number_input(f"{flat_prefix}.height_divisor",
+                                           pc["height_divisor"], pc_def["height_divisor"],
+                                           "高度除数", min_value=1, step=1)
+        with c3:
+            config = editable_number_input(f"{flat_prefix}.height_coeff",
+                                           pc["height_coeff"], pc_def["height_coeff"],
+                                           "高度系数", min_value=0.001, step=0.001)
+            config = editable_number_input(f"{flat_prefix}.pallet_capacity",
+                                           pc["pallet_capacity"], pc_def["pallet_capacity"],
+                                           "每托盘容量（支）", min_value=1, step=1)
+            config = editable_number_input(f"{flat_prefix}.packing_weight_kg",
+                                           pc["packing_weight_kg"], pc_def["packing_weight_kg"],
+                                           "每托盘包装重（KG）", min_value=0, step=1)
+
+    # --- 围栏板tab ---
+    with pkg_tab2:
+        pc = config["package"]["fence"]
+        pc_def = DEFAULT_CONFIG["package"]["fence"]
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            config = editable_number_input("package.fence.default_length_per_piece",
+                                           pc["default_length_per_piece"], pc_def["default_length_per_piece"],
+                                           "默认单支长度（m）", min_value=0.1, step=0.1)
+            config = editable_number_input("package.fence.default_weight_per_meter",
+                                           pc["default_weight_per_meter"], pc_def["default_weight_per_meter"],
+                                           "默认米重（KG/m）", min_value=0.01, step=0.01)
+            config = editable_number_input("package.fence.width_m",
+                                           pc["width_m"], pc_def["width_m"],
+                                           "包装宽度（m）", min_value=0.01, step=0.01)
+        with c2:
+            config = editable_number_input("package.fence.length_extra_m",
+                                           pc["length_extra_m"], pc_def["length_extra_m"],
+                                           "长度余量（m）", min_value=0.0, step=0.01)
+            config = editable_number_input("package.fence.height_base_m",
+                                           pc["height_base_m"], pc_def["height_base_m"],
+                                           "高度基数（m）", min_value=0.0, step=0.01)
+            config = editable_number_input("package.fence.height_divisor",
+                                           pc["height_divisor"], pc_def["height_divisor"],
+                                           "高度除数", min_value=1, step=1)
+        with c3:
+            config = editable_number_input("package.fence.height_coeff",
+                                           pc["height_coeff"], pc_def["height_coeff"],
+                                           "高度系数", min_value=0.001, step=0.001)
+            config = editable_number_input("package.fence.pallet_capacity",
+                                           pc["pallet_capacity"], pc_def["pallet_capacity"],
+                                           "每托盘容量（支）", min_value=1, step=1)
+            config = editable_number_input("package.fence.packing_weight_kg",
+                                           pc["packing_weight_kg"], pc_def["packing_weight_kg"],
+                                           "每托盘包装重（KG）", min_value=0, step=1)
+            config = editable_number_input("package.fence.over_height_pieces",
+                                           pc.get("over_height_pieces", 182), pc_def.get("over_height_pieces", 182),
+                                           "180支以上高度计算用支数（Excel固定为182）", min_value=1, step=1)
+
+    # --- 地板tab ---
+    with pkg_tab3:
+        pc = config["package"]["floor"]
+        pc_def = DEFAULT_CONFIG["package"]["floor"]
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            config = editable_number_input("package.floor.default_length_per_piece",
+                                           pc["default_length_per_piece"], pc_def["default_length_per_piece"],
+                                           "默认单支长度（m）", min_value=0.1, step=0.1)
+            config = editable_number_input("package.floor.default_weight_per_meter",
+                                           pc["default_weight_per_meter"], pc_def["default_weight_per_meter"],
+                                           "默认米重（KG/m）", min_value=0.01, step=0.01)
+            config = editable_number_input("package.floor.width_m",
+                                           pc["width_m"], pc_def["width_m"],
+                                           "包装宽度（m）", min_value=0.01, step=0.01)
+        with c2:
+            config = editable_number_input("package.floor.length_extra_m",
+                                           pc["length_extra_m"], pc_def["length_extra_m"],
+                                           "长度余量（m）", min_value=0.0, step=0.01)
+            config = editable_number_input("package.floor.height_base_m",
+                                           pc["height_base_m"], pc_def["height_base_m"],
+                                           "高度基数（m）", min_value=0.0, step=0.01)
+            config = editable_number_input("package.floor.height_divisor",
+                                           pc["height_divisor"], pc_def["height_divisor"],
+                                           "高度除数", min_value=1, step=1)
+        with c3:
+            config = editable_number_input("package.floor.height_coeff",
+                                           pc["height_coeff"], pc_def["height_coeff"],
+                                           "高度系数", min_value=0.001, step=0.001)
+            config = editable_number_input("package.floor.pallet_capacity",
+                                           pc["pallet_capacity"], pc_def["pallet_capacity"],
+                                           "每托盘容量（支）", min_value=1, step=1)
+            config = editable_number_input("package.floor.packing_weight_kg",
+                                           pc["packing_weight_kg"], pc_def["packing_weight_kg"],
+                                           "每托盘包装重（KG）", min_value=0, step=1)
+
     st.divider()
+
+    # ========== 配件重量参数 ==========
     st.subheader("🔧 配件重量参数（KG/件）")
     aw = config["accessory_weight"]
     aw_def = DEFAULT_CONFIG["accessory_weight"]
@@ -183,7 +294,7 @@ def page_settings():
                                        "柱座单重", min_value=0.0, step=0.01)
         config = editable_number_input("accessory_weight.post_cap_weight", aw["post_cap_weight"], aw_def["post_cap_weight"],
                                        "柱帽单重", min_value=0.0, step=0.01)
-    st.session_state["config"] = config
 
+    st.session_state["config"] = config
 
 page_settings()

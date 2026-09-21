@@ -11,7 +11,7 @@ from calculator.price_calc import (
     convert_currency,
     currency_symbol,
 )
-
+from config_default import WALL_PANEL_PRODUCTS
 
 def _display_wall_panel_result(result: dict, currency: str, sym: str):
     st.subheader("📊 计算结果")
@@ -19,6 +19,7 @@ def _display_wall_panel_result(result: dict, currency: str, sym: str):
     col1.metric("人民币单支价", f"¥ {result['unit_price_cny']:.2f}")
     col2.metric("欧元单支价", f"€ {result['unit_price_eur']:.2f}")
     col3.metric("美元单支价", f"$ {result['unit_price_usd']:.2f}")
+
     if currency == "CNY":
         unit_price_target = result["unit_price_cny"]
         total_target = result["pieces_needed"] * unit_price_target
@@ -28,6 +29,7 @@ def _display_wall_panel_result(result: dict, currency: str, sym: str):
     else:
         unit_price_target = result["unit_price_usd"]
         total_target = result["pieces_needed"] * unit_price_target
+
     input_val = (f"{result['input_area']} m²" if "input_area" in result
                  else f"{result['input_length']} m")
     df = pd.DataFrame([{
@@ -41,7 +43,6 @@ def _display_wall_panel_result(result: dict, currency: str, sym: str):
     st.dataframe(df, use_container_width=True, hide_index=True)
     st.caption("📌 UI展示数量四舍五入；单价、总价均保留2位小数，底层计算保留完整高精度，与Excel逻辑一致。")
 
-
 def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
                           cny_to_usd: float, sym: str, config: dict):
     st.subheader("📊 计算结果")
@@ -51,20 +52,24 @@ def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
     price_9layer_board_eur = 0.0
     price_11layer_board_eur = 0.0
     accessories_total_eur = 0.0
+
     for item in result["items"]:
         unit_price = convert_currency(item["unit_price_eur"], currency, cny_to_eur, cny_to_usd)
         total = convert_currency(item["total_eur"], currency, cny_to_eur, cny_to_usd)
         raw_qty = item["quantity"]
         disp_qty = round(raw_qty)
+
         if item["name"] == "1.5米高围栏板（9层）":
             price_9layer_board_eur = item["total_eur"]
         elif item["name"] == "1.8米高围栏板（11层）":
             price_11layer_board_eur = item["total_eur"]
         else:
             accessories_total_eur += item["total_eur"]
+
         item_key = item.get("key")
         if item_key is not None and item_key in weight_key_list:
             qty_map[item_key] = raw_qty
+
         rows.append({
             "项目": item["name"],
             "数量": f"{disp_qty}",
@@ -72,8 +77,10 @@ def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
             f"单价（{sym}）": f"{unit_price:.2f}",
             f"总价（{sym}）": f"{total:.2f}",
         })
+
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
+
     total_9_all_eur = price_9layer_board_eur + accessories_total_eur
     total_11_all_eur = price_11layer_board_eur + accessories_total_eur
     col_p1, col_p2 = st.columns(2)
@@ -83,6 +90,7 @@ def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
     with col_p2:
         p11 = convert_currency(total_11_all_eur, currency, cny_to_eur, cny_to_usd)
         st.metric("1.8米围栏板（11层）分项总价", f"{sym} {p11:.2f}")
+
     aw = config["accessory_weight"]
     q_post = qty_map.get("post", 0)
     q_side_strip = qty_map.get("side_strip", 0)
@@ -101,7 +109,6 @@ def _display_fence_result(result: dict, currency: str, cny_to_eur: float,
     acc_weight_kg = math.ceil(weight_sum)
     st.metric(label="📦 围栏配件总重量", value=f"{acc_weight_kg} kg")
     st.caption("📌 UI展示数量做四舍五入；重量计算使用底层原始浮点数量，复刻Excel CEILING向上取整逻辑。")
-
 
 def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
                           cny_to_usd: float, sym: str):
@@ -124,14 +131,15 @@ def _display_floor_result(result: dict, currency: str, cny_to_eur: float,
         })
     df = pd.DataFrame(rows)
     st.dataframe(df, use_container_width=True, hide_index=True)
+
     total_target = convert_currency(result["total_eur"], currency, cny_to_eur, cny_to_usd)
     st.subheader(f"💰 总价：{sym} {total_target:.2f}")
     st.caption("📌 UI展示数量四舍五入；单价、总价均保留2位小数，底层计算保留完整高精度。")
 
-
 def page_price_calc():
     config = st.session_state["config"]
     st.header("💰 价格计算")
+
     col_cur, _ = st.columns([1, 3])
     with col_cur:
         currency = st.selectbox(
@@ -143,20 +151,29 @@ def page_price_calc():
     cny_to_eur = config["exchange_rate"]["cny_to_eur"]
     cny_to_usd = config["exchange_rate"]["cny_to_usd"]
     sym = currency_symbol(currency)
+
     st.divider()
+
+    # 板材类型：所有墙板产品 + 围栏板 + 地板
+    wall_product_names = [p["name"] for p in WALL_PANEL_PRODUCTS]
     panel_type = st.selectbox(
         "选择板材类型",
-        options=["二代共挤四代长城板", "围栏板", "地板"],
+        options=wall_product_names + ["围栏板", "地板"],
         key="price_panel_type",
     )
-    if panel_type == "二代共挤四代长城板":
-        wp_cfg = config["wall_panel_price"]
+
+    # ========== 墙板产品计算（所有墙板共用一套逻辑） ==========
+    if panel_type in wall_product_names:
+        product = next(p for p in WALL_PANEL_PRODUCTS if p["name"] == panel_type)
+        wp_cfg = config[product["price_key"]]
         moq_wall = wp_cfg["moq_pieces"]
+
         calc_method = st.selectbox(
             "计算方式",
             options=["按面积计算", "按长度计算"],
             key="wp_calc_method",
         )
+
         if calc_method == "按面积计算":
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -172,16 +189,13 @@ def page_price_calc():
                 )
             with col3:
                 tolerance_pieces_wall = st.number_input("容错支数", min_value=0, value=5, step=1, key="wp_tol_area")
+
             if st.button("计算", type="primary", key="wp_area_calc"):
                 result = calc_wall_panel_by_area(
                     area_sqm=area,
-                    length_per_piece=length_per_piece,
-                    price_per_meter_cny=wp_cfg["price_per_meter_cny"],
+                    product_price_config=wp_cfg,
                     cny_to_eur=cny_to_eur,
                     cny_to_usd=cny_to_usd,
-                    panel_width_m=wp_cfg["panel_width_m"],
-                    eur_extra_fee=wp_cfg["eur_extra_fee"],
-                    cny_extra_per_meter=wp_cfg["cny_extra_per_meter"],
                 )
                 result["pieces_needed"] += tolerance_pieces_wall
                 original_pieces = result["pieces_needed"]
@@ -189,7 +203,8 @@ def page_price_calc():
                     st.warning(f"⚠️计算得到需要 {original_pieces:.0f} 支，小于最小起订量{moq_wall}支，已自动使用MOQ最小起订量")
                     result["pieces_needed"] = moq_wall
                 _display_wall_panel_result(result, currency, sym)
-        else:
+
+        else:  # 按长度计算
             col1, col2, col3 = st.columns(3)
             with col1:
                 length = st.number_input(
@@ -204,16 +219,13 @@ def page_price_calc():
                 )
             with col3:
                 tolerance_pieces_wall_len = st.number_input("容错支数", min_value=0, value=5, step=1, key="wp_tol_len")
+
             if st.button("计算", type="primary", key="wp_length_calc"):
                 result = calc_wall_panel_by_length(
                     length_m=length,
-                    price_per_meter_cny=wp_cfg["price_per_meter_cny"],
+                    product_price_config=wp_cfg,
                     cny_to_eur=cny_to_eur,
                     cny_to_usd=cny_to_usd,
-                    length_per_piece=length_per_piece,
-                    panel_width_m=wp_cfg["panel_width_m"],
-                    eur_extra_fee=wp_cfg["eur_extra_fee"],
-                    cny_extra_per_meter=wp_cfg["cny_extra_per_meter"],
                 )
                 result["pieces_needed"] += tolerance_pieces_wall_len
                 original_pieces = result["pieces_needed"]
@@ -221,6 +233,8 @@ def page_price_calc():
                     st.warning(f"⚠️计算得到需要 {original_pieces:.0f} 支，小于最小起订量{moq_wall}支，已自动使用MOQ最小起订量")
                     result["pieces_needed"] = moq_wall
                 _display_wall_panel_result(result, currency, sym)
+
+    # ========== 围栏板计算 ==========
     elif panel_type == "围栏板":
         st.info("💡 围栏板原始配置存储欧元价格；可切换显示CNY / USD；非常规尺寸价格另算。")
         fp_cfg = config["fence_price"]
@@ -250,6 +264,8 @@ def page_price_calc():
             result["total_eur"] = total_eur_new
             _display_fence_result(result, currency, cny_to_eur, cny_to_usd, sym, config)
             st.session_state["last_fence_length"] = fence_length
+
+    # ========== 地板计算 ==========
     elif panel_type == "地板":
         st.info("💡 地板原始配置存储欧元价格；可切换显示CNY / USD；龙骨和封边为标准2.9米尺寸，定制价格另算。")
         fl_cfg = config["floor_price"]
@@ -276,6 +292,5 @@ def page_price_calc():
                 total_eur_new += it["total_eur"]
             result["total_eur"] = total_eur_new
             _display_floor_result(result, currency, cny_to_eur, cny_to_usd, sym)
-
 
 page_price_calc()
