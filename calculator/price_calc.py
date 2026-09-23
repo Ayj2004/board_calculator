@@ -6,12 +6,11 @@
 """
 import math
 from typing import Dict
-
 # ============================================================
 # 币种换算工具
 # ============================================================
 def convert_currency(amount_eur: float, target_currency: str,
-                    cny_to_eur: float, cny_to_usd: float) -> float:
+                     cny_to_eur: float, cny_to_usd: float) -> float:
     """
     将欧元金额换算为目标币种。
     参数:
@@ -30,16 +29,19 @@ def convert_currency(amount_eur: float, target_currency: str,
         return amount_eur * cny_to_eur / cny_to_usd
     return amount_eur
 
+
 def currency_symbol(currency: str) -> str:
     """返回币种符号"""
     return {"EUR": "€", "USD": "$", "CNY": "¥"}.get(currency, "")
 
+
 # ============================================================
 # 一、墙板 价格计算（所有墙板产品通用）
-#    对应 Excel Sheet1 B2:F5
+#   对应 Excel Sheet1 B2:F5
 # ============================================================
 def calc_wall_panel_unit_prices(
     product_price_config: Dict,
+    actual_length_per_piece: float,
     cny_to_eur: float,
     cny_to_usd: float,
 ) -> Dict[str, float]:
@@ -51,15 +53,11 @@ def calc_wall_panel_unit_prices(
         F2 美元单支价格 = D2 / 6.6
     """
     price_per_meter_cny = product_price_config["price_per_meter_cny"]
-    length_per_piece = product_price_config["default_length_per_piece"]
     eur_extra_fee = product_price_config["eur_extra_fee"]
     cny_extra_per_meter = product_price_config["cny_extra_per_meter"]
 
-    # 人民币单支价格 = (含税/米 + 加价) × 单支米数
-    price_cny_per_piece = (price_per_meter_cny + cny_extra_per_meter) * length_per_piece
-    # 欧元单支价格 = 人民币单支价 / CNY/EUR + 额外加价
+    price_cny_per_piece = (price_per_meter_cny + cny_extra_per_meter) * actual_length_per_piece
     price_eur_per_piece = price_cny_per_piece / cny_to_eur + eur_extra_fee
-    # 美元单支价格 = 人民币单支价 / CNY/USD
     price_usd_per_piece = price_cny_per_piece / cny_to_usd
 
     return {
@@ -68,9 +66,11 @@ def calc_wall_panel_unit_prices(
         "usd": price_usd_per_piece,
     }
 
+
 def calc_wall_panel_by_area(
     area_sqm: float,
     product_price_config: Dict,
+    actual_length_per_piece: float,
     cny_to_eur: float,
     cny_to_usd: float,
 ) -> Dict:
@@ -81,22 +81,19 @@ def calc_wall_panel_by_area(
         B5 总价 = B4 * E2
     """
     unit_prices = calc_wall_panel_unit_prices(
-        product_price_config, cny_to_eur, cny_to_usd
+        product_price_config, actual_length_per_piece, cny_to_eur, cny_to_usd
     )
     panel_width_m = product_price_config["panel_width_m"]
-    length_per_piece = product_price_config["default_length_per_piece"]
+    # 所需数量 = 面积 / (实际单支米数 × 板宽)
+    pieces_needed = area_sqm / (actual_length_per_piece * panel_width_m)
 
-    # 所需数量 = 面积 / (单支米数 × 板宽)
-    pieces_needed = area_sqm / (length_per_piece * panel_width_m)
-    # 各币种总价
     total_cny = pieces_needed * unit_prices["cny"]
     total_eur = pieces_needed * unit_prices["eur"]
     total_usd = pieces_needed * unit_prices["usd"]
-
     return {
         "method": "按面积",
         "input_area": area_sqm,
-        "length_per_piece": length_per_piece,
+        "length_per_piece": actual_length_per_piece,
         "pieces_needed": pieces_needed,
         "unit_price_cny": unit_prices["cny"],
         "unit_price_eur": unit_prices["eur"],
@@ -106,9 +103,11 @@ def calc_wall_panel_by_area(
         "total_usd": total_usd,
     }
 
+
 def calc_wall_panel_by_length(
     length_m: float,
     product_price_config: Dict,
+    actual_length_per_piece: float,
     cny_to_eur: float,
     cny_to_usd: float,
 ) -> Dict:
@@ -119,22 +118,19 @@ def calc_wall_panel_by_length(
         E5 总价 = E2 * E4
     """
     unit_prices = calc_wall_panel_unit_prices(
-        product_price_config, cny_to_eur, cny_to_usd
+        product_price_config, actual_length_per_piece, cny_to_eur, cny_to_usd
     )
     panel_width_m = product_price_config["panel_width_m"]
-    length_per_piece = product_price_config["default_length_per_piece"]
-
     # 所需数量 = 长度 / 板宽
     pieces_needed = length_m / panel_width_m
-    # 各币种总价
+
     total_cny = pieces_needed * unit_prices["cny"]
     total_eur = pieces_needed * unit_prices["eur"]
     total_usd = pieces_needed * unit_prices["usd"]
-
     return {
         "method": "按长度",
         "input_length": length_m,
-        "length_per_piece": length_per_piece,
+        "length_per_piece": actual_length_per_piece,
         "pieces_needed": pieces_needed,
         "unit_price_cny": unit_prices["cny"],
         "unit_price_eur": unit_prices["eur"],
@@ -144,9 +140,10 @@ def calc_wall_panel_by_length(
         "total_usd": total_usd,
     }
 
+
 # ============================================================
 # 二、围栏板 价格计算
-#    对应 Excel Sheet1 B9:D18
+#   对应 Excel Sheet1 B9:D18
 # ============================================================
 def calc_fence(
     fence_length_m: float,
@@ -172,10 +169,8 @@ def calc_fence(
     boards_9 = fence_config["boards_per_section_9"]
     boards_11 = fence_config["boards_per_section_11"]
     bolts_per_post = fence_config["bolts_per_post"]
-
     # 所需立柱数 = 长度/1.8 + 1
     post_count = fence_length_m / section_len + 1
-
     # 构建各项明细
     items = [
         {
@@ -239,13 +234,11 @@ def calc_fence(
             "unit_price_eur": fence_config["expansion_bolt"]["unit_price_eur"],
         },
     ]
-
     # 计算每项总价（欧元）
     total_eur = 0.0
     for item in items:
         item["total_eur"] = item["quantity"] * item["unit_price_eur"]
         total_eur += item["total_eur"]
-
     return {
         "fence_length": fence_length_m,
         "post_count": post_count,
@@ -253,9 +246,10 @@ def calc_fence(
         "total_eur": total_eur,
     }
 
+
 # ============================================================
 # 三、地板 价格计算
-#    对应 Excel Sheet1 B23:F30
+#   对应 Excel Sheet1 B23:F30
 # ============================================================
 def calc_floor(
     area_sqm: float,
@@ -276,7 +270,6 @@ def calc_floor(
     """
     cfg = floor_config
     sqrt_area = math.sqrt(area_sqm)
-
     items = [
         {
             "name": "WPC地板",
@@ -330,7 +323,6 @@ def calc_floor(
             "unit_price_eur": cfg["edge_band"]["unit_price_eur"],
         },
     ]
-
     # 计算总价
     total_eur = 0.0
     for item in items:
@@ -341,16 +333,16 @@ def calc_floor(
         else:
             item["total_eur"] = item["quantity"] * item["unit_price_eur"]
         total_eur += item["total_eur"]
-
     return {
         "area": area_sqm,
         "items": items,
         "total_eur": total_eur,
     }
 
+
 # ============================================================
 # 四、配件重量计算
-#    对应 Excel Sheet2 配件重量公式
+#   对应 Excel Sheet2 配件重量公式
 # ============================================================
 def calc_accessory_weight(
     fence_length_m: float,
@@ -366,7 +358,6 @@ def calc_accessory_weight(
     """
     section_len = fence_config["section_length_m"]
     post_count = fence_length_m / section_len + 1
-
     weight = (
         accessory_config["post_weight_per_piece"] * post_count
         + accessory_config["side_strip_weight"] * post_count
@@ -377,7 +368,6 @@ def calc_accessory_weight(
     )
     # CEILING(..., 1) 向上取整
     weight_ceil = math.ceil(weight)
-
     return {
         "fence_length": fence_length_m,
         "post_count": post_count,
