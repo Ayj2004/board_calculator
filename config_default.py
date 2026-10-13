@@ -161,7 +161,7 @@ DEFAULT_FLOOR_PRICE = {
         "length_multiplier": 3,
         "piece_length_m": 2.9,
         "spec": "总需长度，可除2.9得支数",
-        "unit": "米",
+        "unit": "支",
     },
     "nail": {
         "unit_price_eur": 0.05,
